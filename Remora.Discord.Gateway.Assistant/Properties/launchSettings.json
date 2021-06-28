@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Remora.Discord.Gateway.Assistant": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
