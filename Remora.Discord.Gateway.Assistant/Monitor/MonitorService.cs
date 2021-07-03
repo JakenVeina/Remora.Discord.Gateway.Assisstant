@@ -8,6 +8,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 using Remora.Discord.API.Abstractions.Gateway.Events;
@@ -21,94 +22,159 @@ namespace Remora.Discord.Gateway.Assistant.Monitor
         public static readonly Version RemoraApiVersion
             = typeof(UnknownEvent).Assembly.GetName().Version!;
 
-
-        public MonitorService(IOptions<MonitorConfiguration> monitorBotConfiguration)
+        public MonitorService(
+            ILogger<MonitorService>         logger,
+            IOptions<MonitorConfiguration>  monitorBotConfiguration)
         {
-            _eventReceipts          = Channel.CreateUnbounded<EventReceipt>(new()
+            _eventReceipts              = Channel.CreateUnbounded<EventReceipt>(new()
             {
                 SingleReader = true,
                 SingleWriter = true
             });
-            _monitorConfiguration   = monitorBotConfiguration;
-            _recordedSource         = new();
+            _logger                     = logger;
+            _monitorConfiguration       = monitorBotConfiguration;
+            _unknownEventSavedSource    = new();
         }
 
         public void ClearUnknownEvents()
-            => Directory.Delete(_monitorConfiguration.Value.EventsLogPath);
-
-        public async Task<bool> TryWriteUnknownEventsTo(Stream stream, CancellationToken cancellationToken)
         {
-            if (!Directory.Exists(_monitorConfiguration.Value.EventsLogPath))
-                return false;
+            var unknownEventsLogPath = _monitorConfiguration.Value.UnknownEventsLogPath;
 
-            var filePaths = Directory.EnumerateFiles(_monitorConfiguration.Value.EventsLogPath)
+            MonitorLogger.UnknownEventsDeleting(_logger, unknownEventsLogPath);
+            Directory.Delete(unknownEventsLogPath);
+            MonitorLogger.UnknownEventsDeleted(_logger, unknownEventsLogPath);
+        }
+
+        public async Task<bool> TryArchiveUnknownEventsTo(Stream stream, CancellationToken cancellationToken)
+        {
+            MonitorLogger.UnknownEventsArchiving(_logger);
+
+            var unknownEventsLogPath = _monitorConfiguration.Value.UnknownEventsLogPath;
+
+            if (!Directory.Exists(unknownEventsLogPath))
+            {
+                MonitorLogger.UnknownEventsLogPathNotFound(_logger, unknownEventsLogPath);
+                return false;
+            }
+
+            var filePaths = Directory.EnumerateFiles(unknownEventsLogPath)
                 .ToArray();
 
             if (filePaths.Length == 0)
+            {
+                MonitorLogger.UnknownEventsLogPathEmpty(_logger, unknownEventsLogPath);
                 return false;
+            }
+
+            MonitorLogger.UnknownEventsLogFilesFound(_logger, unknownEventsLogPath, filePaths.Length);
 
             using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
 
             foreach(var filePath in filePaths)
             {
+                MonitorLogger.UnknownEventLogFileArchiving(_logger, filePath);
+
                 using var fileStream = File.OpenRead(filePath);
 
                 var entry = archive.CreateEntry(filePath, CompressionLevel.Optimal);
                 using var entryStream = entry.Open();
 
                 await fileStream.CopyToAsync(entryStream, cancellationToken);
+
+                MonitorLogger.UnknownEventLogFileArchived(_logger, entry);
             }
 
+            MonitorLogger.UnknownEventsArchived(_logger, archive);
             return true;
         }
 
         public IEnumerable<UnknownEventDescriptor> EnumerateUnknownEvents()
-            => Directory.Exists(_monitorConfiguration.Value.EventsLogPath)
-                ? Directory.EnumerateFiles(_monitorConfiguration.Value.EventsLogPath)
-                    .Select(fn => (isValid: UnknownEventDescriptor.TryParse(Path.GetFileNameWithoutExtension(fn), out var descriptor), descriptor))
-                    .Where(x => x.isValid)
-                    .Select(x => x.descriptor)
-                : Enumerable.Empty<UnknownEventDescriptor>();
+        {
+            var unknownEventsLogPath = _monitorConfiguration.Value.UnknownEventsLogPath;
 
-        public ValueTask RecordAsync(IUnknownEvent gatewayEvent, CancellationToken cancellationToken)
-            => _eventReceipts.Writer.WriteAsync(
+            MonitorLogger.UnknownEventsEnumerating(_logger, unknownEventsLogPath);
+
+            if (!Directory.Exists(unknownEventsLogPath))
+            {
+                MonitorLogger.UnknownEventsLogPathNotFound(_logger, unknownEventsLogPath);
+                return Enumerable.Empty<UnknownEventDescriptor>();
+            }
+
+            return Directory.EnumerateFiles(unknownEventsLogPath)
+                .Select(fn =>
+                {
+                    MonitorLogger.UnknownEventLogFileParsing(_logger, fn);
+                    var isValid = UnknownEventDescriptor.TryParse(Path.GetFileNameWithoutExtension(fn), out var descriptor);
+                    if (isValid)
+                        MonitorLogger.UnknownEventLogFileParsed(_logger, descriptor);
+                    else
+                        MonitorLogger.UnknownEventLogFileParseFailed(_logger, fn);
+
+                    return (isValid, descriptor);
+                })
+                .Where(x => x.isValid)
+                .Select(x => x.descriptor);
+        }
+
+        public async ValueTask RecordAsync(IUnknownEvent gatewayEvent, CancellationToken cancellationToken)
+        {
+            MonitorLogger.UnknownEventRecording(_logger);
+            await _eventReceipts.Writer.WriteAsync(
                 new()
                 {
                     Event = gatewayEvent,
                     Received = DateTimeOffset.UtcNow
                 },
                 cancellationToken);
+            MonitorLogger.UnknownEventRecorded(_logger);
+        }
 
-        public Task WhenRecordedAsync(CancellationToken cancellationToken)
+        public Task WhenUnknownEventSavedAsync(CancellationToken cancellationToken)
             => Task.WhenAny(
                 Task.Delay(Timeout.Infinite, cancellationToken),
-                _recordedSource.Task);
+                _unknownEventSavedSource.Task);
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            await foreach (var receipt in _eventReceipts.Reader.ReadAllAsync(stoppingToken))
+            MonitorLogger.MonitorStarting(_logger);
+            try
             {
-                var eventsLogPath = _monitorConfiguration.Value.EventsLogPath;
-                if (!Directory.Exists(eventsLogPath))
-                    Directory.CreateDirectory(eventsLogPath);
-
-                var descriptor = new UnknownEventDescriptor()
+                await foreach (var receipt in _eventReceipts.Reader.ReadAllAsync(stoppingToken))
                 {
-                    Received            = receipt.Received,
-                    RemoraApiVersion    = RemoraApiVersion
-                };
+                    var unknownEventsLogPath = _monitorConfiguration.Value.UnknownEventsLogPath;
 
-                await File.WriteAllTextAsync(Path.Combine(eventsLogPath, $"{descriptor}.json"), receipt.Event.Data, stoppingToken);
+                    if (!Directory.Exists(unknownEventsLogPath))
+                    {
+                        MonitorLogger.UnknownEventsLogPathNotFound(_logger, unknownEventsLogPath);
+                        Directory.CreateDirectory(unknownEventsLogPath);
+                    }
 
-                Interlocked.Exchange(ref _recordedSource, new())
-                    .SetResult();
+                    var descriptor = new UnknownEventDescriptor()
+                    {
+                        Received            = receipt.Received,
+                        RemoraApiVersion    = RemoraApiVersion
+                    };
+                    var filePath = Path.Combine(unknownEventsLogPath, $"{descriptor}.json");
+
+                    MonitorLogger.UnknownEventLogFileSaving(_logger, filePath);
+                    await File.WriteAllTextAsync(filePath, receipt.Event.Data, stoppingToken);
+                    MonitorLogger.UnknownEventLogFileSaved(_logger, filePath);
+
+                    Interlocked.Exchange(ref _unknownEventSavedSource, new())
+                        .SetResult();
+                }
+            }
+            finally
+            {
+                MonitorLogger.MonitorStopped(_logger);
             }
         }
 
         private readonly Channel<EventReceipt>          _eventReceipts;
+        private readonly ILogger                        _logger;
         private readonly IOptions<MonitorConfiguration> _monitorConfiguration;
         
-        private TaskCompletionSource _recordedSource;
+        private TaskCompletionSource _unknownEventSavedSource;
 
         private struct EventReceipt
         {

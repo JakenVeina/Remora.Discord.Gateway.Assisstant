@@ -35,8 +35,10 @@ namespace Remora.Discord.Gateway.Assistant
                         .AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json", optional: true);
 
                     if (context.HostingEnvironment.IsDevelopment())
-                        builder
-                            .AddUserSecrets(Assembly.GetExecutingAssembly());
+                        builder.AddUserSecrets(Assembly.GetExecutingAssembly());
+
+                    builder
+                        .AddEnvironmentVariables(prefix: "DOTNET_");
                 })
                 .ConfigureServices((context, services) => services
                     .AddBot(context)
@@ -45,11 +47,12 @@ namespace Remora.Discord.Gateway.Assistant
                     .AddNotifications(context))
                 .ConfigureLogging((context, builder) =>
                 {
+                    builder
+                        .AddConfiguration(context.Configuration.GetSection("Logging"))
+                        .AddConsole();
+
                     if (context.HostingEnvironment.IsDevelopment())
-                        builder
-                            .AddConfiguration(context.Configuration.GetSection("Logging"))
-                            .AddConsole()
-                            .AddDebug();
+                        builder.AddDebug();
                 })
                 .Build();
 

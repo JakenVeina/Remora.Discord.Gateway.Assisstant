@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 using Remora.Discord.API.Abstractions.Rest;
@@ -20,49 +21,73 @@ namespace Remora.Discord.Gateway.Assistant.Notifications
     {
         public NotificationsService(
             IDiscordRestWebhookAPI                  discordRestWebhookApi,
-            IOptions<MonitorConfiguration>          monitorConfiguration,
+            ILogger<NotificationsService>           logger,
             MonitorService                          monitorService,
             IOptions<NotificationsConfiguration>    notificationsConfiguration)
         {
             _discordRestWebhookApi      = discordRestWebhookApi;
-            _monitorConfiguration       = monitorConfiguration;
+            _logger                     = logger;
             _monitorService             = monitorService;
             _notificationsConfiguration = notificationsConfiguration;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var delay = Task.CompletedTask;
-
-            while (!stoppingToken.IsCancellationRequested)
+            NotificationsLogger.NotificationsStarting(_logger);
+            try
             {
-                if (Directory.Exists(_monitorConfiguration.Value.EventsLogPath))
+                var delay = Task.CompletedTask;
+
+                while (!stoppingToken.IsCancellationRequested)
                 {
+                    NotificationsLogger.UnknownEventsChecking(_logger);
+
                     var descriptors = _monitorService.EnumerateUnknownEvents()
                         .ToArray();
 
-                    if ((descriptors.Length == 1) || ((descriptors.Length > 0) && delay.IsCompleted))
+                    if (descriptors.Length == 0)
+                        NotificationsLogger.UnknownEventsNotFound(_logger);
+                    else
+                        NotificationsLogger.UnknownEventsFound(_logger, descriptors.Length);
+
+                    if ((descriptors.Length == 1) || delay.IsCompleted)
                     {
+                        NotificationsLogger.NotificationRendering(_logger);
                         var embed = descriptors
                             .RenderInfo();
 
-                        await _discordRestWebhookApi.ExecuteWebhookAsync(
+                        NotificationsLogger.NotificationSending(_logger, embed);
+                        var executeResult = await _discordRestWebhookApi.ExecuteWebhookAsync(
                             webhookID:  new Snowflake(_notificationsConfiguration.Value.WebhookId),
                             token:      _notificationsConfiguration.Value.WebhookToken,
                             embeds:     new[] { embed },
                             ct:         stoppingToken);
+                        
+                        if (executeResult.IsSuccess)
+                            NotificationsLogger.NotificationSent(_logger, embed);
+                        else
+                            NotificationsLogger.NotificationSendFailed(_logger, executeResult.Unwrap().Message);
                     }
+
+                    if (delay.IsCompleted)
+                    {
+                        var interval = _notificationsConfiguration.Value.Interval;
+
+                        NotificationsLogger.NotificationDelayResetting(_logger, interval);
+                        delay = Task.Delay(interval, stoppingToken);
+                    }
+
+                    await Task.WhenAny(delay, _monitorService.WhenUnknownEventSavedAsync(stoppingToken));
                 }
-
-                if (delay.IsCompleted)
-                    delay = Task.Delay(_notificationsConfiguration.Value.Interval, stoppingToken);
-
-                await Task.WhenAny(delay, _monitorService.WhenRecordedAsync(stoppingToken));
+            }
+            finally
+            {
+                NotificationsLogger.NotificationsStopped(_logger);
             }
         }
 
         private readonly IDiscordRestWebhookAPI                 _discordRestWebhookApi;
-        private readonly IOptions<MonitorConfiguration>         _monitorConfiguration;
+        private readonly ILogger                                _logger;
         private readonly MonitorService                         _monitorService;
         private readonly IOptions<NotificationsConfiguration>   _notificationsConfiguration;
     }
