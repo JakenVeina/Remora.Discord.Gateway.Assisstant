@@ -32,7 +32,7 @@ namespace Remora.Discord.Gateway.Assistant
                 {
                     builder
                         .AddJsonFile("appsettings.json")
-                        .AddJsonFile($"appsettings.{context.HostingEnvironment}.json", optional: true);
+                        .AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json", optional: true);
 
                     if (context.HostingEnvironment.IsDevelopment())
                         builder
