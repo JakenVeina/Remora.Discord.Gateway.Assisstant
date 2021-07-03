@@ -21,6 +21,8 @@
         UnknownEventLogFileArchiving    = AssistantLogEvent.Monitor + 0x00020E,
         UnknownEventLogFileArchived     = AssistantLogEvent.Monitor + 0x00020F,
         UnknownEventsDeleting           = AssistantLogEvent.Monitor + 0x000210,
-        UnknownEventsDeleted            = AssistantLogEvent.Monitor + 0x000211
+        UnknownEventsDeleted            = AssistantLogEvent.Monitor + 0x000211,
+        UnknownEventLogFileDeleting     = AssistantLogEvent.Monitor + 0x000212,
+        UnknownEventLogFileDeleted      = AssistantLogEvent.Monitor + 0x000213,
     }
 }

@@ -30,14 +30,12 @@ namespace Remora.Discord.Gateway.Assistant.Monitor
                 ZipArchiveEntry entry)
             => _unknownEventLogFileArchived.Invoke(
                 logger,
-                entry.FullName,
-                entry.Length,
-                entry.CompressedLength);
-        private static readonly Action<ILogger, string, long, long> _unknownEventLogFileArchived
-            = LoggerMessage.Define<string, long, long>(
+                entry.FullName);
+        private static readonly Action<ILogger, string> _unknownEventLogFileArchived
+            = LoggerMessage.Define<string>(
                     logLevel:       LogLevel.Debug,
                     eventId:        MonitorLogEvent.UnknownEventLogFileArchived.ToEventId(),
-                    formatString:   "Unknown event log file archived: {EntryFullName}, ({EntryLength} bytes, {EntryCompressedLength} compressed)")
+                    formatString:   "Unknown event log file archived: {EntryFullName}")
                 .WithoutException();
 
         public static void UnknownEventLogFileArchiving(
@@ -51,6 +49,32 @@ namespace Remora.Discord.Gateway.Assistant.Monitor
                     logLevel:       LogLevel.Debug,
                     eventId:        MonitorLogEvent.UnknownEventLogFileArchiving.ToEventId(),
                     formatString:   "Archiving unknown event log file: {UnknownEventFilePath}")
+                .WithoutException();
+
+        public static void UnknownEventLogFileDeleted(
+                ILogger logger,
+                string  unknownEventFilePath)
+            => _unknownEventLogFileDeleted.Invoke(
+                logger,
+                unknownEventFilePath);
+        private static readonly Action<ILogger, string> _unknownEventLogFileDeleted
+            = LoggerMessage.Define<string>(
+                    logLevel:       LogLevel.Debug,
+                    eventId:        MonitorLogEvent.UnknownEventLogFileDeleted.ToEventId(),
+                    formatString:   "Unknown event log file deleted: {UnknownEventFilePath}")
+                .WithoutException();
+
+        public static void UnknownEventLogFileDeleting(
+                ILogger logger,
+                string unknownEventFilePath)
+            => _unknownEventLogFileDeleting.Invoke(
+                logger,
+                unknownEventFilePath);
+        private static readonly Action<ILogger, string> _unknownEventLogFileDeleting
+            = LoggerMessage.Define<string>(
+                    logLevel:       LogLevel.Debug,
+                    eventId:        MonitorLogEvent.UnknownEventLogFileDeleting.ToEventId(),
+                    formatString:   "Unknown event log file deleted: {UnknownEventFilePath}")
                 .WithoutException();
 
         public static void UnknownEventLogFileParsed(
@@ -148,10 +172,10 @@ namespace Remora.Discord.Gateway.Assistant.Monitor
 
         public static void UnknownEventsArchived(
                 ILogger     logger,
-                ZipArchive  archive)
+                int         entryCount)
             => _unknownEventsArchived.Invoke(
                 logger,
-                archive.Entries.Count);
+                entryCount);
         private static readonly Action<ILogger, int> _unknownEventsArchived
             = LoggerMessage.Define<int>(
                     logLevel:       LogLevel.Information,
@@ -178,7 +202,7 @@ namespace Remora.Discord.Gateway.Assistant.Monitor
             = LoggerMessage.Define<string>(
                     logLevel:       LogLevel.Information,
                     eventId:        MonitorLogEvent.UnknownEventsDeleted.ToEventId(),
-                    formatString:   "Unknown events folder deleted: {UnknownEventsLogPath}")
+                    formatString:   "Unknown events log files deleted: {UnknownEventsLogPath}")
                 .WithoutException();
 
         public static void UnknownEventsDeleting(
@@ -191,7 +215,7 @@ namespace Remora.Discord.Gateway.Assistant.Monitor
             = LoggerMessage.Define<string>(
                     logLevel:       LogLevel.Debug,
                     eventId:        MonitorLogEvent.UnknownEventsDeleting.ToEventId(),
-                    formatString:   "Deleting unknown events folder: {UnknownEventsLogPath}")
+                    formatString:   "Deleting unknown events log files: {UnknownEventsLogPath}")
                 .WithoutException();
 
         public static void UnknownEventsEnumerating(

@@ -41,7 +41,14 @@ namespace Remora.Discord.Gateway.Assistant.Monitor
             var unknownEventsLogPath = _monitorConfiguration.Value.UnknownEventsLogPath;
 
             MonitorLogger.UnknownEventsDeleting(_logger, unknownEventsLogPath);
-            Directory.Delete(unknownEventsLogPath);
+            
+            foreach(var filePath in Directory.EnumerateFiles(unknownEventsLogPath))
+            {
+                MonitorLogger.UnknownEventLogFileDeleting(_logger, filePath);
+                File.Delete(filePath);
+                MonitorLogger.UnknownEventLogFileDeleting(_logger, filePath);
+            }
+
             MonitorLogger.UnknownEventsDeleted(_logger, unknownEventsLogPath);
         }
 
@@ -77,14 +84,14 @@ namespace Remora.Discord.Gateway.Assistant.Monitor
                 using var fileStream = File.OpenRead(filePath);
 
                 var entry = archive.CreateEntry(filePath, CompressionLevel.Optimal);
-                using var entryStream = entry.Open();
 
+                using (var entryStream = entry.Open())
                 await fileStream.CopyToAsync(entryStream, cancellationToken);
 
                 MonitorLogger.UnknownEventLogFileArchived(_logger, entry);
             }
 
-            MonitorLogger.UnknownEventsArchived(_logger, archive);
+            MonitorLogger.UnknownEventsArchived(_logger, filePaths.Length);
             return true;
         }
 
