@@ -17,7 +17,7 @@ using Remora.Results;
 
 namespace Remora.Discord.Gateway.Assistant.Management
 {
-    [Group("assitant")]
+    [Group("assistant")]
     public class ManagementCommandGroup
         : CommandGroup
     {
