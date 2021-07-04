@@ -27,13 +27,17 @@ namespace Remora.Discord.Gateway.Assistant.Management
         {
             // TODO: Revert all this back to use the interactions API, when https://github.com/Nihlus/Remora.Discord/pull/69 becomes available.
             public UnknownEventsCommandGroup(
-                //IDiscordRestInteractionAPI  discordRestInteractionApi,
+                IDiscordRestChannelAPI              discordRestChannelApi,
+                //IDiscordRestInteractionAPI          discordRestInteractionApi,
+                IDiscordRestUserAPI                 discordRestUserApi,
                 IDiscordRestWebhookAPI              discordRestWebhookApi,
                 ILogger<UnknownEventsCommandGroup>  logger,
                 MonitorService                      monitorService,
                 InteractionContext                  interactionContext)
             {
+                _discordRestChannelApi      = discordRestChannelApi;
                 //_discordRestInteractionApi  = discordRestInteractionApi;
+                _discordRestUserApi         = discordRestUserApi;
                 _discordRestWebhookApi      = discordRestWebhookApi;
                 _interactionContext         = interactionContext;
                 _logger                     = logger;
@@ -103,6 +107,48 @@ namespace Remora.Discord.Gateway.Assistant.Management
                 memoryStream.Position = 0;
                 ManagementLogger.UnknownEventsDownloaded(_logger, memoryStream);
 
+                var error = null as IResultError;
+                var deleteOperation = null as Task;
+                if (didWrite)
+                {
+                    var userId = _interactionContext.User.ID;
+
+                    ManagementLogger.DirectMessageChannelCreating(_logger, userId);
+                    var channelResult = await _discordRestUserApi.CreateDMAsync(userId, CancellationToken);
+                    if (!channelResult.IsSuccess)
+                    {
+                        error = channelResult.Unwrap();
+                        ManagementLogger.DirectMessageChannelCreateFailed(_logger, error);
+                    }
+                    else
+                    {
+                        var channelId = channelResult.Entity.ID;
+
+                        ManagementLogger.DirectMessageChannelCreated(_logger, channelId);
+
+                        var messageResult = await _discordRestChannelApi.CreateMessageAsync(
+                            channelID:  channelId,
+                            embeds:     new[]
+                            {
+                                new Embed(
+                                    Timestamp:  DateTimeOffset.UtcNow,
+                                    Footer:     new EmbedFooter($"API Version {MonitorService.RemoraApiVersion}"))
+                            },
+                            file:       new FileData("unknown-events.zip", memoryStream),
+                            ct:         CancellationToken);
+                        if (!messageResult.IsSuccess)
+                        {
+                            error = messageResult.Unwrap();
+                            ManagementLogger.DirectMessageFailed(_logger, error);
+                        }
+                        else
+                            deleteOperation = DeleteOldMessagesAsync(
+                                channelId:  channelId,
+                                authorId:   messageResult.Entity.Author.ID,
+                                before:     messageResult.Entity.ID);
+                    }
+                }
+
                 ManagementLogger.CommandFollowingUp(_logger);
                 var followupResult = await _discordRestWebhookApi.CreateFollowupMessageAsync(
                     applicationID:  _interactionContext.ApplicationID,
@@ -110,19 +156,64 @@ namespace Remora.Discord.Gateway.Assistant.Management
                     embeds:         new[]
                     {
                         new Embed(
-                            Title:      didWrite
-                                ? default(Optional<string>)
-                                : "There are no unknown events available for download.",
+                            Title:      (error is not null) ? $"An error occurred during processing of the download: {error.Message}"
+                                :       didWrite            ? "Your download is ready. Please check your Direct Messages."
+                                                            : "There are no unknown events available for download.",
                             Timestamp:  DateTimeOffset.UtcNow,
                             Footer:     new EmbedFooter($"API Version {MonitorService.RemoraApiVersion}"))
                     },
-                    file:           new FileData("unknown-events.zip", memoryStream),
                     ct:             CancellationToken);
-                ManagementLogger.CommandFollowedUp(_logger, followupResult);
+                if (!followupResult.IsSuccess)
+                {
+                    error = followupResult.Unwrap();
+                    ManagementLogger.CommandFollowUpFailed(_logger, error);
+                }
+                else
+                    ManagementLogger.CommandFollowedUp(_logger, followupResult);
 
-                return followupResult.IsSuccess
+                if (deleteOperation is not null)
+                    await deleteOperation;
+
+                return (error is null)
                     ? Result.FromSuccess()
-                    : Result.FromError(followupResult.Error);
+                    : Result.FromError(error);
+
+                async Task DeleteOldMessagesAsync(
+                    Snowflake channelId,
+                    Snowflake authorId,
+                    Snowflake before)
+                {
+                    ManagementLogger.OldMessagesDownloading(_logger, channelId, before);
+
+                    var oldMessagesResult = await _discordRestChannelApi.GetChannelMessagesAsync(
+                        channelID:  channelId,
+                        before:     before,
+                        ct:         CancellationToken);
+                    if (!oldMessagesResult.IsSuccess)
+                    {
+                        ManagementLogger.OldMessagesDownloadFailed(_logger, oldMessagesResult.Unwrap());
+                        return;
+                    }
+
+                    foreach(var oldMessage in oldMessagesResult.Entity)
+                    {
+                        ManagementLogger.OldMessageChecking(_logger, oldMessage.ID, oldMessage.Author.ID, authorId);
+                        
+                        if (oldMessage.Author.ID == authorId)
+                        {
+                            ManagementLogger.OldMessageDeleting(_logger, oldMessage.ID);
+                            var deleteResult = await _discordRestChannelApi.DeleteMessageAsync(
+                                channelID:  channelId,
+                                messageID:  oldMessage.ID,
+                                ct:         CancellationToken);
+
+                            if (!deleteResult.IsSuccess)
+                                ManagementLogger.OldMessageDeleteFailed(_logger, deleteResult.Unwrap());
+                            else
+                                ManagementLogger.OldMessageDeleted(_logger);
+                        }
+                    }
+                }
             }
 
             [Command("info")]
@@ -159,7 +250,9 @@ namespace Remora.Discord.Gateway.Assistant.Management
                     : Result.FromError(followupResult.Error);
             }
 
+            private readonly IDiscordRestChannelAPI         _discordRestChannelApi;
             //private readonly IDiscordRestInteractionAPI     _discordRestInteractionApi;
+            private readonly IDiscordRestUserAPI            _discordRestUserApi;
             private readonly IDiscordRestWebhookAPI         _discordRestWebhookApi;
             private readonly InteractionContext             _interactionContext;
             private readonly ILogger                        _logger;

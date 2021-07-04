@@ -4,6 +4,7 @@ using System.IO;
 using Microsoft.Extensions.Logging;
 
 using Remora.Discord.API.Abstractions.Objects;
+using Remora.Discord.Core;
 using Remora.Results;
 
 namespace Remora.Discord.Gateway.Assistant.Management
@@ -32,6 +33,19 @@ namespace Remora.Discord.Gateway.Assistant.Management
                     formatString:   "Following up command")
                 .WithoutException();
 
+        public static void CommandFollowUpFailed(
+                ILogger         logger,
+                IResultError    error)
+            => _commandFollowUpFailed.Invoke(
+                logger,
+                error);
+        private static readonly Action<ILogger, IResultError> _commandFollowUpFailed
+            = LoggerMessage.Define<IResultError>(
+                    logLevel:       LogLevel.Error,
+                    eventId:        ManagementLogEvent.CommandFollowUpFailed.ToEventId(),
+                    formatString:   "Command followup failed: {Error}")
+                .WithoutException();
+
         public static void CommandsDeploying(ILogger logger)
             => _commandsDeploying.Invoke(logger);
         private static readonly Action<ILogger> _commandsDeploying
@@ -57,6 +71,138 @@ namespace Remora.Discord.Gateway.Assistant.Management
                     logLevel:       LogLevel.Information,
                     eventId:        ManagementLogEvent.CommandsInitializing.ToEventId(),
                     formatString:   "Initializing commands")
+                .WithoutException();
+
+        public static void DirectMessageChannelCreated(
+                ILogger     logger,
+                Snowflake   channelId)
+            => _directMessageChannelCreated.Invoke(
+                logger,
+                channelId);
+        private static readonly Action<ILogger, Snowflake> _directMessageChannelCreated
+            = LoggerMessage.Define<Snowflake>(
+                    logLevel:       LogLevel.Debug,
+                    eventId:        ManagementLogEvent.DirectMessageChannelCreated.ToEventId(),
+                    formatString:   "Direct message channel created: {ChannelId}")
+                .WithoutException();
+
+        public static void DirectMessageChannelCreateFailed(
+                ILogger         logger,
+                IResultError    error)
+            => _directMessageChannelCreateFailed.Invoke(
+                logger,
+                error);
+        private static readonly Action<ILogger, IResultError> _directMessageChannelCreateFailed
+            = LoggerMessage.Define<IResultError>(
+                    logLevel:       LogLevel.Error,
+                    eventId:        ManagementLogEvent.DirectMessageChannelCreateFailed.ToEventId(),
+                    formatString:   "Direct message channel creation failed: {Error}")
+                .WithoutException();
+
+        public static void DirectMessageChannelCreating(
+                ILogger     logger,
+                Snowflake   userId)
+            => _directMessageChannelCreating.Invoke(
+                logger,
+                userId);
+        private static readonly Action<ILogger, Snowflake> _directMessageChannelCreating
+            = LoggerMessage.Define<Snowflake>(
+                    logLevel:       LogLevel.Information,
+                    eventId:        ManagementLogEvent.DirectMessageChannelCreating.ToEventId(),
+                    formatString:   "Creating direct message channel: UserId: {UserId}")
+                .WithoutException();
+
+        public static void DirectMessageFailed(
+                ILogger         logger,
+                IResultError    error)
+            => _directMessageFailed.Invoke(
+                logger,
+                error);
+        private static readonly Action<ILogger, IResultError> _directMessageFailed
+            = LoggerMessage.Define<IResultError>(
+                    logLevel:       LogLevel.Error,
+                    eventId:        ManagementLogEvent.DirectMessageFailed.ToEventId(),
+                    formatString:   "Direct message failed: {Error}")
+                .WithoutException();
+
+        public static void OldMessageChecking(
+                ILogger     logger,
+                Snowflake   messageId,
+                Snowflake   authorId,
+                Snowflake   botId)
+            => _oldMessageChecking.Invoke(
+                logger,
+                messageId,
+                authorId,
+                botId);
+        private static readonly Action<ILogger, Snowflake, Snowflake, Snowflake> _oldMessageChecking
+            = LoggerMessage.Define<Snowflake, Snowflake, Snowflake>(
+                    logLevel:       LogLevel.Debug,
+                    eventId:        ManagementLogEvent.OldMessageChecking.ToEventId(),
+                    formatString:   "Checking old message {MessageId} by {AuthorId} (looking for {BotId})")
+                .WithoutException();
+
+        public static void OldMessageDeleted(ILogger logger)
+            => _oldMessageDeleted.Invoke(logger);
+        private static readonly Action<ILogger> _oldMessageDeleted
+            = LoggerMessage.Define(
+                    logLevel:       LogLevel.Debug,
+                    eventId:        ManagementLogEvent.OldMessageDeleted.ToEventId(),
+                    formatString:   "Old message deleted")
+                .WithoutException();
+
+        public static void OldMessageDeleteFailed(
+                ILogger logger,
+                IResultError error)
+            => _oldMessageDeleteFailed.Invoke(
+                logger,
+                error);
+        private static readonly Action<ILogger, IResultError> _oldMessageDeleteFailed
+            = LoggerMessage.Define<IResultError>(
+                    logLevel:       LogLevel.Warning,
+                    eventId:        ManagementLogEvent.OldMessageDeleteFailed.ToEventId(),
+                    formatString:   "Failed to delete old message: {Error}")
+                .WithoutException();
+
+        public static void OldMessageDeleting(
+                ILogger     logger,
+                Snowflake   messageId)
+            => _oldMessagesDeleting.Invoke(
+                logger,
+                messageId);
+        private static readonly Action<ILogger, Snowflake> _oldMessagesDeleting
+            = LoggerMessage.Define<Snowflake>(
+                    logLevel:       LogLevel.Debug,
+                    eventId:        ManagementLogEvent.OldMessageDeleting.ToEventId(),
+                    formatString:   "Deleting old message {MessageId}")
+                .WithoutException();
+
+        public static void OldMessagesDownloadFailed(
+                ILogger         logger,
+                IResultError    error)
+            => _oldMessagesDownloadFailed.Invoke(
+                logger,
+                error);
+        private static readonly Action<ILogger, IResultError> _oldMessagesDownloadFailed
+            = LoggerMessage.Define<IResultError>(
+                    logLevel:       LogLevel.Warning,
+                    eventId:        ManagementLogEvent.OldMessagesDownloadFailed.ToEventId(),
+                    formatString:   "Failed to download old messages: {Error}")
+                .WithoutException();
+
+        public static void OldMessagesDownloading(
+                ILogger     logger,
+                Snowflake   channelId,
+                Snowflake   before)
+            => _oldMessagesDownloading.Invoke(
+                logger,
+                channelId,
+                before);
+        private static readonly Action<ILogger, Snowflake, Snowflake> _oldMessagesDownloading
+            = LoggerMessage.Define<Snowflake, Snowflake>(
+                    logLevel:       LogLevel.Debug,
+                    eventId:        ManagementLogEvent.OldMessagesDownloading.ToEventId(),
+                    formatString:   "Downloading old messages in channel {ChannelId} before {Before}")
                 .WithoutException();
 
         public static void UnknownEventsCleared(ILogger logger)
