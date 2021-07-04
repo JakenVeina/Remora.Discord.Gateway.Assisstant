@@ -128,18 +128,16 @@ namespace Remora.Discord.Gateway.Assistant.Management
         public static void OldMessageChecking(
                 ILogger     logger,
                 Snowflake   messageId,
-                Snowflake   authorId,
-                Snowflake   botId)
+                Snowflake   authorId)
             => _oldMessageChecking.Invoke(
                 logger,
                 messageId,
-                authorId,
-                botId);
-        private static readonly Action<ILogger, Snowflake, Snowflake, Snowflake> _oldMessageChecking
-            = LoggerMessage.Define<Snowflake, Snowflake, Snowflake>(
+                authorId);
+        private static readonly Action<ILogger, Snowflake, Snowflake> _oldMessageChecking
+            = LoggerMessage.Define<Snowflake, Snowflake>(
                     logLevel:       LogLevel.Debug,
                     eventId:        ManagementLogEvent.OldMessageChecking.ToEventId(),
-                    formatString:   "Checking old message {MessageId} by {AuthorId} (looking for {BotId})")
+                    formatString:   "Checking old message {MessageId} by {AuthorId}")
                 .WithoutException();
 
         public static void OldMessageDeleted(ILogger logger)

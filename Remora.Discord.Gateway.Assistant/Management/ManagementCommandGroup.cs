@@ -197,9 +197,9 @@ namespace Remora.Discord.Gateway.Assistant.Management
 
                     foreach(var oldMessage in oldMessagesResult.Entity)
                     {
-                        ManagementLogger.OldMessageChecking(_logger, oldMessage.ID, oldMessage.Author.ID, authorId);
+                        ManagementLogger.OldMessageChecking(_logger, oldMessage.ID, oldMessage.Author.ID);
                         
-                        if (oldMessage.Author.ID == authorId)
+                        if ((oldMessage.Author.ID == authorId) && (oldMessage.Attachments.Any(a => a.Filename == "unknown-events.zip")))
                         {
                             ManagementLogger.OldMessageDeleting(_logger, oldMessage.ID);
                             var deleteResult = await _discordRestChannelApi.DeleteMessageAsync(
